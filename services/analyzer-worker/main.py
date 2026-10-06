@@ -6,6 +6,7 @@ from google import genai
 from google.genai import types
 from confluent_kafka import Consumer, KafkaError, KafkaException
 from dotenv import load_dotenv
+import psycopg
 
 
 load_dotenv()
@@ -42,6 +43,30 @@ def analyze_threat(payload: dict, client: genai.Client) -> str:
     )
     return response.text
 
+def save_to_db(source: str, severity: str, mitigation_json: str):
+    conn_info = f"host={os.environ.get('POSTGRES_HOST')} port={os.environ.get('POSTGRES_PORT')} dbname={os.environ.get('POSTGRES_DB')} user={os.environ.get('POSTGRES_USER')} password={os.environ.get('POSTGRES_PASSWORD')}"
+    
+    mitigation_data = json.loads(mitigation_json)
+    
+    with psycopg.connect(conn_info) as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO threat_intelligence 
+                (source, original_severity, threat_classification, affected_components, immediate_action_required, risk_level) 
+                VALUES (%s, %s, %s, %s, %s, %s)
+                RETURNING id;
+            """, (
+                source,
+                severity,
+                mitigation_data['threat_classification'],
+                mitigation_data['affected_components'],
+                mitigation_data['immediate_action_required'],
+                mitigation_data['risk_level']
+            ))
+            record_id = cur.fetchone()[0]
+            conn.commit()
+            return record_id
+
 def main():
     api_key = os.environ.get('GEMINI_API_KEY')
     if not api_key:
@@ -76,11 +101,15 @@ def main():
 
             try:
                 data = json.loads(msg.value().decode('utf-8'))
+                source = data.get('source')
+                severity = data.get('severity')
+
                 logger.info(f"Processing new alert from {data.get('source')}...")
                 
                 mitigation_json = analyze_threat(data, gemini_client)
-                
-                logger.info(f"AI Mitigation Plan Generated:\n{mitigation_json}")
+
+                record_id = save_to_db(source, severity, mitigation_json)
+                logger.info(f"Successfully saved AI Mitigation Plan to database (Record ID: {record_id}).")
                 
                 consumer.commit(asynchronous=False)
                 
