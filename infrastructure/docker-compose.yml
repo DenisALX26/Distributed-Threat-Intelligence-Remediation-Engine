@@ -25,3 +25,18 @@ services:
       - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:29092 
     depends_on:
       - kafka
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: aegis-db
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=aegis_admin
+      - POSTGRES_PASSWORD=supersecretpassword
+      - POSTGRES_DB=aegis_threats
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+volumes:
+  pg_data:
