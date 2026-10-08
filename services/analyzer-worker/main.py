@@ -9,9 +9,10 @@ from google import genai
 from google.genai import types
 from confluent_kafka import Consumer, KafkaError, KafkaException
 
-# NEW: MCP Client Imports
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 load_dotenv()
 
@@ -43,9 +44,8 @@ def save_to_db(source: str, severity: str, mitigation_json: str):
             conn.commit()
             return cur.fetchone()[0]
 
-# NEW: The Autonomous Agent Logic
+@retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=2, min=2, max=20))
 async def analyze_with_mcp(payload: dict, client: genai.Client) -> str:
-    # 1. Define the MCP Server connection (runs mcp_server.py as a subprocess)
     server_params = StdioServerParameters(
         command="python",
         args=["mcp_server.py"],
@@ -56,7 +56,6 @@ async def analyze_with_mcp(payload: dict, client: genai.Client) -> str:
         async with ClientSession(read, write) as session:
             await session.initialize()
             
-            # 2. Define the tool for Gemini
             inventory_tool = types.Tool(
                 function_declarations=[
                     types.FunctionDeclaration(
@@ -82,21 +81,18 @@ async def analyze_with_mcp(payload: dict, client: genai.Client) -> str:
 
             logger.info("Requesting initial analysis from Gemini...")
             
-            # 3. Call Gemini (giving it access to the tool, but NOT forcing JSON yet)
             response = client.models.generate_content(
                 model='gemini-3.5-flash-lite',
                 contents=prompt,
                 config=types.GenerateContentConfig(tools=[inventory_tool], temperature=0.1)
             )
 
-            # 4. Check if Gemini decided to use the tool
             if response.function_calls:
                 for function_call in response.function_calls:
                     if function_call.name == "check_internal_inventory":
                         software = function_call.args["software_name"]
                         logger.info(f"[*] AI Agent initiated Tool Call: Checking inventory for '{software}'...")
                         
-                        # Forward the request to our local MCP Server
                         mcp_result = await session.call_tool(
                             "check_internal_inventory", 
                             arguments={"software_name": software}
@@ -104,7 +100,6 @@ async def analyze_with_mcp(payload: dict, client: genai.Client) -> str:
                         tool_output = mcp_result.content[0].text
                         logger.info(f"[*] MCP Server replied: {tool_output.strip()}")
                         
-                        # 5. Send the database results back to Gemini and enforce JSON structure
                         logger.info("Sending database results back to Gemini for final verdict...")
                         final_response = client.models.generate_content(
                             model='gemini-3.5-flash-lite',
@@ -127,7 +122,6 @@ async def analyze_with_mcp(payload: dict, client: genai.Client) -> str:
                         )
                         return final_response.text
 
-            # Fallback if Gemini somehow didn't use the tool (rare with explicit prompts)
             logger.warning("Gemini bypassed the tool. Generating JSON fallback...")
             fallback = client.models.generate_content(
                 model='gemini-3.5-flash-lite', contents=prompt,
@@ -163,7 +157,6 @@ def main():
                 data = json.loads(msg.value().decode('utf-8'))
                 logger.info(f"\n--- New Alert: {data.get('source')} ---")
                 
-                # Execute the async MCP function inside our synchronous consumer loop
                 mitigation_json = asyncio.run(analyze_with_mcp(data, gemini_client))
                 
                 logger.info(f"Final AI Plan:\n{json.dumps(json.loads(mitigation_json), indent=2)}")
