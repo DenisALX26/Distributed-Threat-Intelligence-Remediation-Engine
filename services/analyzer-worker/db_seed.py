@@ -9,7 +9,6 @@ def seed_inventory():
     
     with psycopg.connect(conn_info) as conn:
         with conn.cursor() as cur:
-            print("Creating asset_inventory table...")
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS asset_inventory (
                     id SERIAL PRIMARY KEY,
@@ -22,7 +21,6 @@ def seed_inventory():
                 );
             """)
             
-            print("Seeding mock servers...")
             cur.execute("TRUNCATE TABLE asset_inventory;")
             
             cur.execute("""
@@ -33,7 +31,6 @@ def seed_inventory():
                 ('web-dev-01', '10.0.2.10', 'Ubuntu 22.04', 'Apache', 'development');
             """)
             conn.commit()
-            print("Asset inventory seeded successfully.")
 
 if __name__ == '__main__':
     seed_inventory()

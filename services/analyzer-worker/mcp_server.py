@@ -10,11 +10,6 @@ mcp = MCPServer("Aegis Asset Inventory")
 
 @mcp.tool()
 def check_internal_inventory(software_name: str) -> str:
-    """
-    Check the internal asset inventory database for running software.
-    Pass the base software name (e.g., 'Apache', 'Nginx', 'PostgreSQL').
-    Returns a summary of affected internal systems or indicates none were found.
-    """
     conn_info = f"host={os.environ.get('POSTGRES_HOST')} port={os.environ.get('POSTGRES_PORT')} dbname={os.environ.get('POSTGRES_DB')} user={os.environ.get('POSTGRES_USER')} password={os.environ.get('POSTGRES_PASSWORD')}"
 
     try:
@@ -47,12 +42,6 @@ def check_internal_inventory(software_name: str) -> str:
 
 @mcp.tool()
 def generate_firewall_rule(ip_address: str) -> str:
-    """
-    Generate the required iptables command to isolate a compromised internal server.
-    Pass the exact IP address that needs to be quarantined.
-    """
-    # In a fully automated SOC, this tool would connect via SSH and execute the rule.
-    # For our Aegis platform, we generate the command for the AI to include in its plan.
     rule = f"sudo iptables -A INPUT -s {ip_address} -j DROP\nsudo iptables -A OUTPUT -d {ip_address} -j DROP"
     return f"Firewall isolation script generated successfully:\n{rule}"
 

@@ -184,7 +184,7 @@ def main():
 
     consumer = Consumer(conf)
     consumer.subscribe([os.environ.get("KAFKA_TOPIC", "raw-threat-intel")])
-    logger.info("Subscribed to Kafka. Agent online.")
+    logger.info("Agent on")
 
     try:
         while True:
@@ -216,7 +216,7 @@ def main():
                 logger.exception("Failed to process message:")
 
     except KeyboardInterrupt:
-        logger.info("Shutting down...")
+        logger.info("Process interrupted")
     finally:
         consumer.close()
 

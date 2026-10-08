@@ -15,7 +15,6 @@ def init_db():
     
     with psycopg.connect(conn_info) as conn:
         with conn.cursor() as cur:
-            print("Creating threat_intelligence table...")
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS threat_intelligence (
                     id SERIAL PRIMARY KEY,
@@ -29,7 +28,6 @@ def init_db():
                 );
             """)
             conn.commit()
-            print("Database initialized successfully.")
 
 if __name__ == '__main__':
     init_db()
